@@ -22,7 +22,6 @@ namespace VideoProcessor
             // parse query parameter
             string video = req.Query["video"];
 
-
             // Get request body
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             var data = JsonConvert.DeserializeObject<RequestBody>(requestBody);
@@ -40,7 +39,8 @@ namespace VideoProcessor
             }
 
             log.LogInformation($"About to start orchestration for {video}");
-            string orchestrationId = await starter.StartNewAsync("O_ProcessVideo", video);
+            log.LogInformation($"Video - Mriganka - {video}");
+            string orchestrationId = await starter.StartNewAsync<string>("O_ProcessVideo", video);
             return starter.CreateCheckStatusResponse(req, orchestrationId);
         }
     }
