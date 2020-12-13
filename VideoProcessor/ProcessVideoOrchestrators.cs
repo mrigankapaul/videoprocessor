@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Extensions.DurableTask;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace VideoProcessor
 {
@@ -25,8 +27,14 @@ namespace VideoProcessor
 
             try
             {
-                transcodedLocation = await
-                    ctx.CallActivityAsync<string>("A_TranscodeVideo", videoLocation);
+                var transcodeResults =
+                            await ctx.CallSubOrchestratorAsync<VideoFileInfo[]>("O_TranscodeVideo", videoLocation);
+   
+
+                transcodedLocation = transcodeResults
+                        .OrderByDescending(r => r.BitRate)
+                        .Select(r => r.Location)
+                        .First();
 
                 if (!ctx.IsReplaying)
                     log.LogInformation("About to call extract thumbnail");
@@ -66,5 +74,26 @@ namespace VideoProcessor
             };
 
         }
+
+        [FunctionName("O_TranscodeVideo")]
+        public static async Task<VideoFileInfo[]> TranscodeVideo(
+            [OrchestrationTrigger] IDurableOrchestrationContext ctx,
+            ILogger log)
+        {
+            var videoLocation = ctx.GetInput<string>();
+            var bitRates = await ctx.CallActivityAsync<int[]>("A_GetTranscodeBitrates", null);
+            var transcodeTasks = new List<Task<VideoFileInfo>>();
+
+            foreach (var bitRate in bitRates)
+            {
+                var info = new VideoFileInfo() { Location = videoLocation, BitRate = bitRate };
+                var task = ctx.CallActivityAsync<VideoFileInfo>("A_TranscodeVideo", info);
+                transcodeTasks.Add(task);
+            }
+
+            var transcodeResults = await Task.WhenAll(transcodeTasks);
+            return transcodeResults;
+        }
+
     }
 }
