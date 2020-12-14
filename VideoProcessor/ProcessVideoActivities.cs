@@ -135,5 +135,13 @@ namespace VideoProcessor
             // simulate doing the activity
             await Task.Delay(1000);
         }
+
+        [FunctionName("A_PeriodicActivity")]
+        public static void PeriodicActivity(
+            [ActivityTrigger] int timesRun,
+            ILogger log)
+        {
+            log.LogWarning($"Running the periodic activity, times run = {timesRun}");
+        }
     }
 }

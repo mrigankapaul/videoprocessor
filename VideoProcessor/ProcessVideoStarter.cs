@@ -68,6 +68,16 @@ namespace VideoProcessor
             return new OkResult();
         }
 
+        [FunctionName("StartPeriodicTask")]
+        public static async Task<IActionResult> StartPeriodicTask(
+            [HttpTrigger(AuthorizationLevel.Function, "get", Route = null)]
+            HttpRequest req,
+            [DurableClient] IDurableOrchestrationClient client,
+            ILogger log)
+        {
+            var instanceId = await client.StartNewAsync<int>("O_PeriodicTask", null, 0);
+            return client.CreateCheckStatusResponse(req, instanceId);
+        }
     }
 
 
