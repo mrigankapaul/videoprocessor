@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace VideoProcessor
 {
@@ -24,6 +25,7 @@ namespace VideoProcessor
             string transcodedLocation = null;
             string thumbnailLocation = null;
             string withIntroLocation = null;
+            string approvalResult = "unknown";
 
             try
             {
@@ -48,6 +50,39 @@ namespace VideoProcessor
                 withIntroLocation = await
                     ctx.CallActivityAsync<string>("A_PrependIntro", transcodedLocation);
 
+                await ctx.CallActivityAsync<string>("A_SendApprovalRequestEmail", new ApprovalInfo()
+                {
+                    OrchestrationId = ctx.InstanceId,
+                    VideoLocation = withIntroLocation
+                });
+
+                using (var cts = new CancellationTokenSource())
+                {
+                    var timeoutAt = ctx.CurrentUtcDateTime.AddSeconds(30);
+                    var timeoutTask = ctx.CreateTimer(timeoutAt, cts.Token);
+                    var approvalTask = ctx.WaitForExternalEvent<string>("ApprovalResult");
+
+                    var winner = await Task.WhenAny(approvalTask, timeoutTask);
+                    if (winner == approvalTask)
+                    {
+                        approvalResult = approvalTask.Result;
+                        cts.Cancel(); // we should cancel the timeout task
+                    }
+                    else
+                    {
+                        approvalResult = "Timed Out";
+                    }
+                }
+
+                if (approvalResult == "Approved")
+                {
+                    await ctx.CallActivityAsync<string>("A_PublishVideo", withIntroLocation);
+                }
+                else
+                {
+                    await ctx.CallActivityAsync<string>("A_RejectVideo", withIntroLocation);
+                }
+
             }
             catch (Exception e)
             {
@@ -70,7 +105,8 @@ namespace VideoProcessor
             {
                 Transcoded = transcodedLocation,
                 Thumbnail = thumbnailLocation,
-                WithIntro = withIntroLocation
+                WithIntro = withIntroLocation,
+                ApprovalResult  = approvalResult
             };
 
         }
